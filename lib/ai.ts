@@ -1,8 +1,16 @@
 import OpenAI from "openai";
 
-export const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+function getOpenAI() {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey || apiKey.trim() === "" || apiKey === "your_openai_api_key_here") {
+    return null;
+  }
+
+  return new OpenAI({
+    apiKey,
+  });
+}
 
 export async function analyzeBusiness(input: {
   name: string;
@@ -11,25 +19,30 @@ export async function analyzeBusiness(input: {
   services: string[];
   locations: string[];
 }) {
-  if (!process.env.OPENAI_API_KEY) {
-    return {
-      serviceKeywords: input.services,
-      locationKeywords: input.locations.length ? input.locations : [input.city],
-      naturalQuestions: [
-        "What service did you use?",
-        "What did you like most?",
-        "Was the team professional?",
-        "Was the work completed properly?"
-      ],
-      safetyRules: [
-        "Only write based on real experience.",
-        "Do not add fake claims.",
-        "Do not overuse keywords."
-      ]
-    };
+  const fallback = {
+    serviceKeywords: input.services,
+    locationKeywords: input.locations.length ? input.locations : [input.city],
+    naturalQuestions: [
+      "What service did you use?",
+      "What did you like most?",
+      "Was the team professional?",
+      "Was the work completed properly?"
+    ],
+    safetyRules: [
+      "Only write based on real experience.",
+      "Do not add fake claims.",
+      "Do not overuse keywords."
+    ]
+  };
+
+  const openai = getOpenAI();
+
+  if (!openai) {
+    return fallback;
   }
 
-  const prompt = `
+  try {
+    const prompt = `
 Analyze this local business and return JSON only.
 
 Business: ${input.name}
@@ -47,13 +60,17 @@ Return:
 }
 `;
 
-  const res = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content: prompt }],
-    response_format: { type: "json_object" },
-  });
+    const res = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+    });
 
-  return JSON.parse(res.choices[0].message.content || "{}");
+    return JSON.parse(res.choices[0].message.content || "{}");
+  } catch (error) {
+    console.log("OpenAI failed, using fallback:", error);
+    return fallback;
+  }
 }
 
 export async function generateReviews(input: {
@@ -66,15 +83,21 @@ export async function generateReviews(input: {
   tone: string;
   length: string;
 }) {
-  if (!process.env.OPENAI_API_KEY) {
-    return {
-      short: `Good experience with ${input.service}. The team was professional and the work was done properly.`,
-      medium: `I had a good experience with ${input.business} for ${input.service}. The team handled the work neatly and explained things clearly. Overall, I am satisfied with the service.`,
-      casual: `Nice experience overall. The service was done well, and the team was helpful.`
-    };
+  const fallback = {
+    short: `Good experience with ${input.service}. The team was professional and the work was done properly.`,
+    medium: `I had a good experience with ${input.business} for ${input.service}. The team handled the work neatly and explained things clearly. Overall, I am satisfied with the service.`,
+    casual: `Nice experience overall. The service was done well, and the team was helpful.`,
+    warnings: []
+  };
+
+  const openai = getOpenAI();
+
+  if (!openai) {
+    return fallback;
   }
 
-  const prompt = `
+  try {
+    const prompt = `
 You are helping a real customer write a Google review based only on their actual experience.
 
 Rules:
@@ -105,11 +128,15 @@ Return:
 }
 `;
 
-  const res = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content: prompt }],
-    response_format: { type: "json_object" },
-  });
+    const res = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+    });
 
-  return JSON.parse(res.choices[0].message.content || "{}");
+    return JSON.parse(res.choices[0].message.content || "{}");
+  } catch (error) {
+    console.log("OpenAI review generation failed, using fallback:", error);
+    return fallback;
+  }
 }
