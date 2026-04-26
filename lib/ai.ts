@@ -1,24 +1,14 @@
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-function getOpenAI() {
-  const apiKey = process.env.OPENAI_API_KEY;
+function getGemini() {
+  const key = process.env.GEMINI_API_KEY;
 
-  if (!apiKey || apiKey.trim() === "" || apiKey === "your_openai_api_key_here") {
-    return null;
-  }
+  if (!key || key.trim() === "") return null;
 
-  return new OpenAI({
-    apiKey,
-  });
+  return new GoogleGenerativeAI(key);
 }
 
-export async function analyzeBusiness(input: {
-  name: string;
-  category: string;
-  city: string;
-  services: string[];
-  locations: string[];
-}) {
+export async function analyzeBusiness(input: any) {
   const fallback = {
     serviceKeywords: input.services,
     locationKeywords: input.locations.length ? input.locations : [input.city],
@@ -35,15 +25,14 @@ export async function analyzeBusiness(input: {
     ]
   };
 
-  const openai = getOpenAI();
-
-  if (!openai) {
-    return fallback;
-  }
+  const genAI = getGemini();
+  if (!genAI) return fallback;
 
   try {
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+
     const prompt = `
-Analyze this local business and return JSON only.
+Return JSON only.
 
 Business: ${input.name}
 Category: ${input.category}
@@ -51,7 +40,6 @@ City: ${input.city}
 Services: ${input.services.join(", ")}
 Locations: ${input.locations.join(", ")}
 
-Return:
 {
  "serviceKeywords": [],
  "locationKeywords": [],
@@ -60,66 +48,38 @@ Return:
 }
 `;
 
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
-    });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
 
-    return JSON.parse(res.choices[0].message.content || "{}");
-  } catch (error) {
-    console.log("OpenAI failed, using fallback:", error);
+    return JSON.parse(text);
+  } catch (err) {
+    console.log("Gemini failed", err);
     return fallback;
   }
 }
 
-export async function generateReviews(input: {
-  business: string;
-  service: string;
-  location: string;
-  rating: number;
-  experiencePoints: string[];
-  language: string;
-  tone: string;
-  length: string;
-}) {
+export async function generateReviews(input: any) {
   const fallback = {
-    short: `Good experience with ${input.service}. The team was professional and the work was done properly.`,
-    medium: `I had a good experience with ${input.business} for ${input.service}. The team handled the work neatly and explained things clearly. Overall, I am satisfied with the service.`,
-    casual: `Nice experience overall. The service was done well, and the team was helpful.`,
+    short: `Good experience with ${input.service}. Work done properly.`,
+    medium: `I had a good experience with ${input.business}. The service was handled professionally.`,
+    casual: `Nice service overall.`,
     warnings: []
   };
 
-  const openai = getOpenAI();
-
-  if (!openai) {
-    return fallback;
-  }
+  const genAI = getGemini();
+  if (!genAI) return fallback;
 
   try {
-    const prompt = `
-You are helping a real customer write a Google review based only on their actual experience.
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
-Rules:
-- Do not create fake claims.
-- Do not sound like marketing.
-- Do not repeat sentence structure.
-- Use simple natural customer language.
-- Include service and location only if natural.
-- Reflect the rating tone.
-- Do not overuse keywords.
-- Generate JSON only.
+    const prompt = `
+Generate 3 natural customer reviews in JSON.
 
 Business: ${input.business}
 Service: ${input.service}
 Location: ${input.location}
 Rating: ${input.rating}
-Experience: ${input.experiencePoints.join(", ")}
-Language: ${input.language}
-Tone: ${input.tone}
-Length: ${input.length}
 
-Return:
 {
  "short": "",
  "medium": "",
@@ -128,15 +88,12 @@ Return:
 }
 `;
 
-    const res = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
-    });
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
 
-    return JSON.parse(res.choices[0].message.content || "{}");
-  } catch (error) {
-    console.log("OpenAI review generation failed, using fallback:", error);
+    return JSON.parse(text);
+  } catch (err) {
+    console.log("Gemini failed", err);
     return fallback;
   }
 }
